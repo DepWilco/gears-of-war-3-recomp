@@ -23,6 +23,7 @@
 #include "setup/finder.h"
 #include "setup/install.h"
 #include "setup/launch_decision.h"
+#include "setup/loose_dlc.h"
 #include "setup/path_util.h"
 #include "setup/settings_store.h"
 #include "setup/state.h"
@@ -289,7 +290,8 @@ std::string Ids(uint32_t title_id, uint32_t media_id) {
   return "Title ID " + gow3::setup::Hex8(title_id) + kDot + "Media ID " + gow3::setup::Hex8(media_id);
 }
 
-// Display names of the Gears 3 DLC packages in <game>\DLC, sorted.
+// Display names of the Gears 3 DLC in <game>\DLC (package files, and loose folders in
+// DLC\4D5308AB\00000002), sorted.
 std::vector<std::string> InstalledDlc(const fs::path& game) {
   using namespace gow3::setup;
   std::vector<std::string> names;
@@ -299,6 +301,10 @@ std::vector<std::string> InstalledDlc(const fs::path& game) {
     const auto h = ReadStfsHeader(it->path());
     if (!h || h->title_id != kGow3TitleId || h->content_type != kDlcType) continue;
     names.push_back(h->display_name.empty() ? Utf8(it->path().filename()) : h->display_name);
+  }
+  for (fs::directory_iterator it(game / "DLC" / "4D5308AB" / "00000002", ec), end; !ec && it != end;
+       it.increment(ec)) {
+    if (IsLooseDlcFolder(it->path())) names.push_back(ReadLooseDlcInfo(it->path()).display_name);
   }
   std::sort(names.begin(), names.end());
   return names;
@@ -584,7 +590,8 @@ void AddPicked(const App& app, const fs::path& picked) {
   SortItems();
   std::string message;
   if (found.empty()) {
-    message = "No Gears of War 3 Title Update or DLC package was found in " + Utf8(picked) + ".";
+    message = "No Gears of War 3 Title Update or DLC package was found in " + Utf8(picked) +
+              ". An extracted (loose) DLC must keep its console layout: 4D5308AB\\00000002\\<package folder>.";
   } else if (!added) {
     message = installed ? "That is already installed." : "That is already in the list.";
   }
@@ -782,7 +789,7 @@ void StartInstall(const App& app, const std::vector<FoundPackage>& picked, JobKi
       if (p.is_tu) continue;
       if (!progress(base, total, "DLC\\" + Utf8(p.file.filename()))) return ExtractResult::kCancelled;
       std::error_code ec;
-      if (!fs::equivalent(p.file, game / "DLC" / p.file.filename(), ec) && !InstallDlc(p, game, error)) {
+      if (!fs::equivalent(p.file, DlcInstallPath(p, game), ec) && !InstallDlc(p, game, error)) {
         return ExtractResult::kFailed;
       }
       base += p.size;

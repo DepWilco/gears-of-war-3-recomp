@@ -10,6 +10,7 @@
 #include <windows.h>
 #include <tlhelp32.h>
 
+#include "setup/loose_dlc.h"
 #include "setup/path_util.h"
 
 namespace fs = std::filesystem;
@@ -128,7 +129,50 @@ ExtractResult InstallTitleUpdate(const FoundPackage& tu, const fs::path& game, c
   return ExtractResult::kOk;
 }
 
+fs::path DlcInstallPath(const FoundPackage& dlc, const fs::path& game) {
+  if (dlc.is_folder) return game / "DLC" / "4D5308AB" / "00000002" / dlc.file.filename();
+  return game / "DLC" / dlc.file.filename();
+}
+
+namespace {
+
+bool InstallLooseDlc(const FoundPackage& dlc, const fs::path& game, std::string* error) {
+  const fs::path live = DlcInstallPath(dlc, game);
+  fs::path part = live;
+  part += ".part-dir";
+  std::error_code ec;
+  fs::remove_all(part, ec);
+  if (!CopyFolder(dlc.file, part, error)) {
+    fs::remove_all(part, ec);
+    return false;
+  }
+  fs::remove_all(live, ec);
+  if (ec) {
+    fs::remove_all(part, ec);
+    if (error) *error = "Could not replace the existing copy of " + Utf8(live.filename());
+    return false;
+  }
+  fs::rename(part, live, ec);
+  if (ec) {
+    fs::remove_all(part, ec);
+    if (error) *error = "Could not move " + Utf8(live.filename()) + " into place (" + ec.message() + ")";
+    return false;
+  }
+  // The display name and license mask come with it; without one gow3.exe uses the folder name.
+  const fs::path header = LooseDlcHeaderPath(dlc.file), header_dst = LooseDlcHeaderPath(live);
+  if (fs::is_regular_file(header, ec)) {
+    fs::create_directories(header_dst.parent_path(), ec);
+    fs::copy_file(header, header_dst, fs::copy_options::overwrite_existing, ec);
+  } else {
+    fs::remove(header_dst, ec);
+  }
+  return true;
+}
+
+}  // namespace
+
 bool InstallDlc(const FoundPackage& dlc, const fs::path& game, std::string* error) {
+  if (dlc.is_folder) return InstallLooseDlc(dlc, game, error);
   fs::path dir = game / "DLC";
   std::error_code ec;
   fs::create_directories(dir, ec);

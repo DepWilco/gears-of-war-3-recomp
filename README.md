@@ -104,6 +104,13 @@ the launcher offers them (see [Download](#download)). Keep them as files in fold
 `RAAM's Shadow\4D5308AB\00000002\<package>`); unpack them first if they came in a `.zip`, `.7z` or
 `.rar`, since the launcher doesn't look inside archives.
 
+Already-extracted (loose) DLC works too, as long as each DLC is a folder in the console layout:
+`<anything>\4D5308AB\00000002\<package folder>\` holding that package's files. This is the layout of
+Xenia's content folder (`content\0000000000000000\4D5308AB\00000002\...`), so you can point the
+launcher's Add files at that folder directly. If Xenia's `4D5308AB\Headers\00000002\<package
+folder>.header` is there, its DLC name is used; otherwise the folder name is shown. The launcher
+copies the folder into `<game>\DLC\4D5308AB\00000002\`, and `gow3.exe` installs it on its next start.
+
 1. Dump **your own** Gears of War 3 disc (base version, no title update) to an ISO.
 2. Extract it to a folder **outside this repository**, for example with
    [xdvdfs](https://github.com/antangelo/xdvdfs):

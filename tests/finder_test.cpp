@@ -104,6 +104,28 @@ TEST(finder_packages_xbox_layout_and_skips) {
   CHECK(gow3::setup::FindPackagesAt(root / "Game" / "DLC" / "AvatarAwards", 0).empty());
 }
 
+TEST(finder_packages_loose_dlc_folders) {
+  auto root = TempDir("find_loose");
+  // Extracted DLC in the console / Xenia layout: one DLC per folder, its files never read as packages.
+  const fs::path type_dir = root / "Gears3-DLC" / "4D5308AB" / "00000002";
+  WriteFile(type_dir / "RAAM" / "GearGame" / "a.bin", "AAAA");
+  WriteFile(type_dir / "RAAM" / "inner", MakeStfsHeader("LIVE", 0x00000002, 0x4D5308AB, 0, u"Inner"));
+  WriteFile(type_dir / "Horde" / "b.bin", "BB");
+  fs::create_directories(type_dir / "Empty");
+  // Xenia's content folder, four folders down: still found (the folder itself is at the depth limit).
+  WriteFile(root / "content" / "0000000000000000" / "4D5308AB" / "00000002" / "Fenix" / "c.bin", "C");
+  auto p = gow3::setup::FindPackages({root}, 0);
+  CHECK(p.size() == 3);
+  CHECK(std::ranges::all_of(p, [](auto& x) { return x.is_folder && !x.is_tu && x.matches_disc; }));
+  const auto raam = std::ranges::find_if(p, [](auto& x) { return x.file.filename() == "RAAM"; });
+  CHECK(raam != p.end() && raam->size == 0x1000 + 4 && raam->header.display_name == "RAAM" &&
+        raam->header.title_id == 0x4D5308AB && raam->id == gow3::setup::PackageId(raam->file, raam->size));
+  // Picked by the player: the loose folder itself, or a folder above it.
+  CHECK(gow3::setup::FindPackagesAt(type_dir / "Horde", 0).size() == 1);
+  CHECK(gow3::setup::FindPackagesAt(type_dir, 0).size() == 2);
+  CHECK(gow3::setup::FindPackagesAt(type_dir / "Empty", 0).empty());
+}
+
 TEST(finder_locked_file_skipped) {
   auto root = TempDir("find4");
   WriteFile(root / "pkg", MakeStfsHeader("LIVE", 0x00000002, 0x4D5308AB, 0, u"X"));

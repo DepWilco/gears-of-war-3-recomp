@@ -50,12 +50,13 @@ struct FoundIso {
   XexInfo xex;
 };
 struct FoundPackage {
-  std::filesystem::path file;
-  uint64_t size;
+  std::filesystem::path file;  // the package file, or the folder of a loose (extracted) DLC
+  uint64_t size;  // a loose DLC: the total size of its files
   std::string id;  // PackageId
   StfsHeader header;
   bool is_tu;
   bool matches_disc;  // TU: media id equals the disc's; DLC: always true
+  bool is_folder = false;  // a loose DLC folder (setup/loose_dlc.h); its header is made up: magic empty
 };
 struct FindResult {
   std::optional<std::filesystem::path> game;
@@ -66,7 +67,8 @@ struct FindResult {
 // (a found game folder returns at once with `isos` empty, so no image is opened).
 FindResult FindGame(const std::vector<std::filesystem::path>& roots);
 // Gears 3 TU and DLC packages in each root and up to kPackageDepth folders below it, which covers the
-// Xbox layout (<name>\4D5308AB\00000002\<package>). Skips game data folders (GearGame, $SystemUpdate),
+// Xbox layout (<name>\4D5308AB\00000002\<package>). A folder in that layout (IsLooseDlcFolder: an
+// extracted DLC, as Xenia's content folder keeps it) is found as one DLC, and not searched further. Skips game data folders (GearGame, $SystemUpdate),
 // build/source trees (.git, out, generated, test-tmp) and the disc's own DLC\AvatarAwards; stops after
 // kPackageScanLimit folder entries so a huge folder can't slow gow3.exe's start.
 inline constexpr int kPackageDepth = 4;
@@ -76,7 +78,8 @@ inline constexpr int kPackageScanLimit = 50000;
 std::vector<FoundPackage> FindPackages(const std::vector<std::filesystem::path>& roots,
                                        uint32_t disc_media_id,
                                        std::chrono::milliseconds budget = std::chrono::milliseconds(0));
-// A package file or a folder the player picked: that file, or the folder searched like a root.
+// A package file or a folder the player picked: that file, that loose DLC folder, or the folder
+// searched like a root.
 std::vector<FoundPackage> FindPackagesAt(const std::filesystem::path& file_or_folder, uint32_t disc_media_id);
 // The disc ships DLC\AvatarAwards (a marketplace-type package named "Gears of War 3"): never offered.
 bool IsDiscOwnPackage(const std::filesystem::path& file);

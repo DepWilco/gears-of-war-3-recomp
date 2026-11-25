@@ -29,7 +29,12 @@ bool SameFileContents(const std::filesystem::path& a, const std::filesystem::pat
 // existing TU6 as it was.
 ExtractResult InstallTitleUpdate(const FoundPackage& tu, const std::filesystem::path& game,
                                  const Progress& progress, std::string* error);
-// Copies the package to <game>\DLC\<file name>, overwriting; the source is untouched.
+// Where InstallDlc puts it: <game>\DLC\<file name> for a package file, and for a loose DLC folder
+// <game>\DLC\4D5308AB\00000002\<folder name> (the layout gow3.exe recognizes it by).
+std::filesystem::path DlcInstallPath(const FoundPackage& dlc, const std::filesystem::path& game);
+// Copies the package to DlcInstallPath, overwriting; the source is untouched. A loose DLC folder is
+// copied to <target>.part-dir and then swapped in (an older copy is replaced), with its Xenia
+// .header (setup/loose_dlc.h) when it has one.
 bool InstallDlc(const FoundPackage& dlc, const std::filesystem::path& game, std::string* error);
 
 }  // namespace gow3::setup

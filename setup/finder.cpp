@@ -9,6 +9,7 @@
 #include <windows.h>
 #include <shellapi.h>
 
+#include "setup/loose_dlc.h"
 #include "setup/state.h"
 #include "setup/xdvdfs.h"
 
@@ -214,6 +215,22 @@ struct PackageScan {
     found.push_back({file, size, PackageId(file, size), *h, tu, !tu || h->media_id == disc_media_id});
   }
 
+  // A loose DLC folder (the caller checked IsLooseDlcFolder).
+  void LooseFolder(const fs::path& dir) {
+    std::error_code ec;
+    fs::path key = fs::weakly_canonical(dir, ec);
+    if (ec) key = dir;
+    if (!seen.insert(key).second) return;
+    StfsHeader h;
+    h.content_type = kDlcType;
+    h.title_id = kGow3TitleId;
+    h.display_name = ReadLooseDlcInfo(dir).display_name;
+    const uint64_t size = FolderSize(dir);
+    FoundPackage p{dir, size, PackageId(dir, size), std::move(h), false, true};
+    p.is_folder = true;
+    found.push_back(std::move(p));
+  }
+
   void Folder(const fs::path& dir, int depth) {
     static const std::set<std::wstring> kSkipDirs = {L"geargame",L"$systemupdate", L".git", L"out",
                                                      L"generated", L"node_modules", L"test-tmp", L"tu6.part-dir",
@@ -224,8 +241,13 @@ struct PackageScan {
       if (Stop()) return;
       std::error_code e2;
       if (it->is_directory(e2)) {
-        if (depth > 0 && !it->is_symlink(e2) && !(Attributes(it->path()) & (FILE_ATTRIBUTE_REPARSE_POINT | kCloudOnly)) &&
-            !kSkipDirs.count(Lower(it->path().filename().native()))) {
+        if (it->is_symlink(e2) || (Attributes(it->path()) & (FILE_ATTRIBUTE_REPARSE_POINT | kCloudOnly)) ||
+            kSkipDirs.count(Lower(it->path().filename().native()))) {
+          continue;
+        }
+        if (IsLooseDlcFolder(it->path())) {
+          LooseFolder(it->path());
+        } else if (depth > 0) {
           Folder(it->path(), depth - 1);
         }
       } else if (it->is_regular_file(e2)) {
@@ -257,6 +279,11 @@ std::vector<FoundPackage> FindPackages(const std::vector<fs::path>& roots, uint3
 
 std::vector<FoundPackage> FindPackagesAt(const fs::path& file_or_folder, uint32_t disc_media_id) {
   std::error_code ec;
+  if (IsLooseDlcFolder(file_or_folder)) {
+    PackageScan scan{disc_media_id};
+    scan.LooseFolder(file_or_folder);
+    return std::move(scan.found);
+  }
   if (fs::is_directory(file_or_folder, ec)) return FindPackages({file_or_folder}, disc_media_id);
   PackageScan scan{disc_media_id};
   const uint64_t size = fs::file_size(file_or_folder, ec);

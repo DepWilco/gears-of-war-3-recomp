@@ -53,6 +53,31 @@ TEST(install_dlc_copies_and_overwrites) {
   CHECK(!gow3::setup::InstallDlc(dlc, game, &err) && !err.empty());
 }
 
+TEST(install_dlc_copies_loose_folder_with_header) {
+  auto d = TempDir("dlc_loose");
+  const fs::path src = d / "src" / "4D5308AB" / "00000002" / "RAAM";
+  WriteFile(src / "GearGame" / "a.bin", "AAAA");
+  WriteFile(d / "src" / "4D5308AB" / "Headers" / "00000002" / "RAAM.header", "HEADER");
+  auto dlc = FakeDlc("RAAM", 4);
+  dlc.file = src;
+  dlc.is_folder = true;
+  auto game = d / "game";
+  const fs::path live = game / "DLC" / "4D5308AB" / "00000002" / "RAAM";
+  CHECK(gow3::setup::DlcInstallPath(dlc, game) == live);
+  std::string err;
+  CHECK(gow3::setup::InstallDlc(dlc, game, &err));
+  CHECK(SameTree(src, live) && fs::exists(src / "GearGame" / "a.bin"));
+  CHECK(FileText(game / "DLC" / "4D5308AB" / "Headers" / "00000002" / "RAAM.header") == "HEADER");
+  CHECK(!fs::exists(game / "DLC" / "4D5308AB" / "00000002" / "RAAM.part-dir"));
+  // Again over an older copy: files the source no longer has are gone.
+  WriteFile(live / "stale.bin", "OLD");
+  CHECK(gow3::setup::InstallDlc(dlc, game, &err));
+  CHECK(SameTree(src, live));
+  dlc.file = d / "src" / "4D5308AB" / "00000002" / "missing";
+  CHECK(!gow3::setup::InstallDlc(dlc, game, &err) && !err.empty());
+  CHECK(SameTree(src, live));  // a failed copy leaves the installed one alone
+}
+
 static auto TuFile(const fs::path& path, const std::string& xexp) {
   WriteFile(path, MakeStfsPackage({{"default.xexp", xexp}, {"other.bin", "OTHER"}}));
   auto tu = FakeTu(path.filename().string(), 1, true);
